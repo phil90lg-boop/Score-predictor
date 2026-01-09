@@ -1,28 +1,72 @@
-# --- CALCULS AVANCÉS ---
-# Probabilités cumulées pour les Over/Under
-over_1_5 = (1 - (matrix[0,0] + matrix[0,1] + matrix[1,0])) * 100
-over_2_5 = (1 - (matrix[0,0] + matrix[0,1] + matrix[1,0] + matrix[1,1] + matrix[2,0] + matrix[0,2])) * 100
-over_3_5 = over_2_5 - (matrix[2,1] * 100 + matrix[1,2] * 100 + matrix[3,0] * 100 + matrix[0,3] * 100)
+import streamlit as st
+import numpy as np
+from scipy.stats import poisson
 
-# --- NOUVELLE LOGIQUE DE VERDICT ---
-st.subheader("🎯 Analyse des Scores (Objectif +2.5 / +3.5)")
+st.set_page_config(page_title="IA Predictor Pro", layout="centered")
+st.title("🏆 Aide au Choix IA")
+
+# --- ENTRÉES ---
+terrain_neutre = st.checkbox("🏟️ Terrain Neutre (CAN, CDM, etc.)", value=True)
+home_adv = 1.0 if terrain_neutre else 1.10
+
+col1, col2 = st.columns(2)
+with col1:
+    h_xg = st.number_input("Force Équipe A (xG)", value=1.5, step=0.1)
+with col2:
+    a_xg = st.number_input("Force Équipe B (xG)", value=1.2, step=0.1)
+
+# --- CALCULS ---
+l_home = h_xg * home_adv
+l_away = a_xg
+
+# On génère les probabilités de 0 à 10 buts pour être large
+h_probs = [poisson.pmf(i, l_home) for i in range(11)]
+a_probs = [poisson.pmf(i, l_away) for i in range(11)]
+matrix = np.outer(h_probs, a_probs)
+
+# Calcul des probabilités de base
+p_1 = np.sum(np.tril(matrix, -1)) * 100
+p_n = np.trace(matrix) * 100
+p_2 = np.sum(np.triu(matrix, 1)) * 100
+
+# Fonction pour calculer n'importe quel "Plus de X buts"
+def get_over_prob(matrix, threshold):
+    prob_under = 0
+    for i in range(matrix.shape[0]):
+        for j in range(matrix.shape[1]):
+            if (i + j) <= threshold:
+                prob_under += matrix[i, j]
+    return (1 - prob_under) * 100
+
+# --- AFFICHAGE DU SCORE ---
+st.divider()
+res_h, res_a = np.unravel_index(matrix.argmax(), matrix.shape)
+st.header(f"Score le plus probable : {res_h} - {res_a}")
+
+# --- ANALYSE DES PARIS ---
+st.subheader("Verdict de l'IA (Cibles +2.5 / +3.5) :")
 
 options = {
-    "Plus de 1.5 buts": over_1_5,
-    "Plus de 2.5 buts": over_2_5,
-    "Plus de 3.5 buts": over_3_5,
+    "Plus de 1.5 buts": get_over_prob(matrix, 1),
+    "Plus de 2.5 buts": get_over_prob(matrix, 2),
+    "Plus de 3.5 buts": get_over_prob(matrix, 3),
     "Les deux marquent": ((1 - h_probs[0]) * (1 - a_probs[0])) * 100,
     "Double Chance 1N": p_1 + p_n,
     "Double Chance N2": p_2 + p_n,
 }
 
-# On durcit les critères : 
-# Un pari n'est "CONSEILLÉ" que s'il dépasse 75% (très sûr)
-# Un pari est "À TENTER" (Belle cote) entre 50% et 75%
+# On affiche par ordre de probabilité
 for label, val in sorted(options.items(), key=lambda x: x[1], reverse=True):
-    if val > 75:
+    # CRITÈRES PLUS STRICTS POUR ÊTRE "JUSTE"
+    if val >= 75:
         st.success(f"✅ **CONSEILLÉ** : {label} ({val:.1f}%)")
-    elif val > 50:
-        st.info(f"🔥 **À TENTER (Belle Cote)** : {label} ({val:.1f}%)")
-    elif val > 30:
+    elif val >= 55:
+        st.info(f"🔥 **À TENTER (Cote Value)** : {label} ({val:.1f}%)")
+    elif val >= 35:
         st.warning(f"⚠️ **PRUDENCE** : {label} ({val:.1f}%)")
+    else:
+        st.error(f"❌ **À ÉVITER** : {label} ({val:.1f}%)")
+
+st.divider()
+st.subheader("Répartition des probabilités :")
+st.write(f"Victoire A : **{p_1:.1f}%** | Nul : **{p_n:.1f}%** | Victoire B : **{p_2:.1f}%**")
