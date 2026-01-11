@@ -1,6 +1,7 @@
 import streamlit as st
 import numpy as np
 from scipy.stats import poisson
+import plotly.express as px
 
 st.set_page_config(page_title="IA Predictor Pro", layout="centered")
 st.title("🏆 Aide au Choix IA")
@@ -19,17 +20,14 @@ with col2:
 l_home = h_xg * home_adv
 l_away = a_xg
 
-# On génère les probabilités de 0 à 10 buts pour être large
 h_probs = [poisson.pmf(i, l_home) for i in range(11)]
 a_probs = [poisson.pmf(i, l_away) for i in range(11)]
 matrix = np.outer(h_probs, a_probs)
 
-# Calcul des probabilités de base
 p_1 = np.sum(np.tril(matrix, -1)) * 100
 p_n = np.trace(matrix) * 100
 p_2 = np.sum(np.triu(matrix, 1)) * 100
 
-# Fonction pour calculer n'importe quel "Plus de X buts"
 def get_over_prob(matrix, threshold):
     prob_under = 0
     for i in range(matrix.shape[0]):
@@ -43,9 +41,24 @@ st.divider()
 res_h, res_a = np.unravel_index(matrix.argmax(), matrix.shape)
 st.header(f"Score le plus probable : {res_h} - {res_a}")
 
-# --- ANALYSE DES PARIS ---
-st.subheader("Verdict de l'IA (Cibles +2.5 / +3.5) :")
+# --- MATRICE GRAPHIQUE ---
+st.subheader("📊 Matrice de probabilités des scores")
+limit = 6 
+display_matrix = matrix[:limit, :limit]
+fig = px.imshow(
+    display_matrix,
+    labels=dict(x="Buts Équipe B", y="Buts Équipe A", color="Probabilité"),
+    x=[str(i) for i in range(limit)],
+    y=[str(i) for i in range(limit)],
+    text_auto=".2%",
+    color_continuous_scale='GnBu'
+)
+st.plotly_chart(fig, use_container_width=True)
 
+# --- ANALYSE DES PARIS ---
+st.subheader("Verdict de l'IA :")
+
+# Correction : L'accolade est bien fermée ici avant de continuer
 options = {
     "Plus de 1.5 buts": get_over_prob(matrix, 1),
     "Plus de 2.5 buts": get_over_prob(matrix, 2),
@@ -53,40 +66,13 @@ options = {
     "Les deux marquent": ((1 - h_probs[0]) * (1 - a_probs[0])) * 100,
     "Double Chance 1N": p_1 + p_n,
     "Double Chance N2": p_2 + p_n,
-import plotly.express as px
+}
 
-st.divider()
-st.subheader("📊 Matrice de probabilités des scores")
-
-# On limite l'affichage à un score de 5-5 pour la lisibilité
-limit = 6 
-display_matrix = matrix[:limit, :limit]
-
-fig = px.imshow(
-    display_matrix,
-    labels=dict(x="Buts Équipe B", y="Buts Équipe A", color="Probabilité"),
-    x=[str(i) for i in range(limit)],
-    y=[str(i) for i in range(limit)],
-    text_auto=".2%", # Affiche les pourcentages dans les cases
-    color_continuous_scale='GnBu' # Dégradé de bleu très lisible
-)
-
-fig.update_layout(
-    xaxis_title="Buts Équipe B (Extérieur)",
-    yaxis_title="Buts Équipe A (Domicile)",
-    width=600,
-    height=600
-)
-
-st.plotly_chart(fig, use_container_width=True)
-
-# On affiche par ordre de probabilité
 for label, val in sorted(options.items(), key=lambda x: x[1], reverse=True):
-    # CRITÈRES PLUS STRICTS POUR ÊTRE "JUSTE"
     if val >= 75:
         st.success(f"✅ **CONSEILLÉ** : {label} ({val:.1f}%)")
     elif val >= 55:
-        st.info(f"🔥 **À TENTER (Cote Value)** : {label} ({val:.1f}%)")
+        st.info(f"🔥 **À TENTER** : {label} ({val:.1f}%)")
     elif val >= 35:
         st.warning(f"⚠️ **PRUDENCE** : {label} ({val:.1f}%)")
     else:
