@@ -53,7 +53,32 @@ options = {
     "Les deux marquent": ((1 - h_probs[0]) * (1 - a_probs[0])) * 100,
     "Double Chance 1N": p_1 + p_n,
     "Double Chance N2": p_2 + p_n,
-}
+import plotly.express as px
+
+st.divider()
+st.subheader("📊 Matrice de probabilités des scores")
+
+# On limite l'affichage à un score de 5-5 pour la lisibilité
+limit = 6 
+display_matrix = matrix[:limit, :limit]
+
+fig = px.imshow(
+    display_matrix,
+    labels=dict(x="Buts Équipe B", y="Buts Équipe A", color="Probabilité"),
+    x=[str(i) for i in range(limit)],
+    y=[str(i) for i in range(limit)],
+    text_auto=".2%", # Affiche les pourcentages dans les cases
+    color_continuous_scale='GnBu' # Dégradé de bleu très lisible
+)
+
+fig.update_layout(
+    xaxis_title="Buts Équipe B (Extérieur)",
+    yaxis_title="Buts Équipe A (Domicile)",
+    width=600,
+    height=600
+)
+
+st.plotly_chart(fig, use_container_width=True)
 
 # On affiche par ordre de probabilité
 for label, val in sorted(options.items(), key=lambda x: x[1], reverse=True):
